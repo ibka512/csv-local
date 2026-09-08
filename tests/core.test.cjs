@@ -1,0 +1,12 @@
+const assert=require('node:assert/strict');
+const test=require('node:test');
+const {decode,preview,encode}=require('../core.js');
+const sample='姓名,备注\r\n张三,"包含,逗号与""引号"""\r\n李四,"多\n行"\r\n';
+test('UTF-8 roundtrip preserves exact CSV content and line endings',()=>{const result=decode(new TextEncoder().encode(sample),'auto');assert.equal(result.text,sample);assert.deepEqual([...encode(result.text).slice(0,3)],[239,187,191]);assert.equal(decode(encode(result.text),'auto').text,sample);});
+test('BOM-free export and existing BOM do not duplicate',()=>{assert.deepEqual(encode('a',false),new Uint8Array([97]));assert.deepEqual(encode(decode(new Uint8Array([239,187,191,97]),'auto').text),new Uint8Array([239,187,191,97]));});
+test('preview respects escaped quotes and embedded commas/newlines',()=>assert.deepEqual(preview(sample,','),[['姓名','备注'],['张三','包含,逗号与"引号"'],['李四','多\n行']]));
+test('GBK bytes decode correctly; auto refuses to guess',()=>{const gbk=new Uint8Array([0xd6,0xd0,0xce,0xc4]);assert.equal(decode(gbk,'gb18030').text,'中文');assert.throws(()=>decode(gbk,'auto'));});
+test('UTF-16 BOM endianness is recognized',()=>{assert.equal(decode(new Uint8Array([255,254,45,78]),'auto').text,'中');assert.equal(decode(new Uint8Array([254,255,78,45]),'auto').text,'中');});
+test('empty, invalid and binary inputs fail closed',()=>{assert.throws(()=>decode(new Uint8Array(),'auto'));assert.throws(()=>decode(new Uint8Array([0xff]),'utf-8'));assert.throws(()=>decode(new Uint8Array([0,1,2]),'auto'));});
+test('preview is bounded, supports TSV and trailing empty cells',()=>{assert.equal(preview('a\n'.repeat(100),',').length,8);assert.deepEqual(preview('a\tb\t','\t'),[['a','b','']]);});
+test('export does not alter formulas or long numeric strings',()=>{const original='id,formula\n00123456789012345678,=1+1\n';assert.equal(decode(encode(original),'auto').text,original);});
